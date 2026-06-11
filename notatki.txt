@@ -1,0 +1,61 @@
+NLP, scaffold? jakieś uczenie. Nie musi wyjść super, normalne że wyjdzie słabo
+
+Problem wygaszających się neuronów - Przy pierwszych x epokach monitorowanie czy wagi nie zbliżają się niebezpiecznie do zera
+
+GCN
+przed GCN normalizacja
+
+Wybuchające gradienty
+Zanikające gradienty
+
+Batch normalization
+Dropout - przy niektórych batchach coś tam się pomija
+
+obserwacja martwych sieci neuronowych
+i gradientów bo mogą wybuchać
+
+printować sobie gradienty
+sprawdzanie czy batche się zgadzają pomiędzy epokami
+np. czy rząd normalizacji jest taki sam
+
+loss function - obserwacja i jak powinno przebiegać
+learning rate
+potencjalny problem - za duży albo z mały learning rate
+
+z dużym można przeskakwiać minimum
+można sobie zadać dwa różne learning rate - np. na pierwszą połowe większy, a na drugą mniejszy
+
+cutoff - można zdefiniować jakąś liczbę epsilon, gdzie różnica pomiędzy epokami już nie robi nam różnicy i zatrzymujemy trening.
+
+overfitting - na to może nam pomóć dropout, zmniejszenie złożoności modelu, zmniejszenia ilości danych, wrócić do dzielenia zestawów treningowych (może być zbyt prosty, zubożały, przecieki)
+
+czy nie giną neurony
+monitorowanie R^2 dla zestawu treningowego i walidacyjnego
+
+wymyślamy sobie jakąś swoją architekturę i próbujemy uzyskać overfitting:
+około 10k rekordów - ograniczenie po jednym białku - wybrać chorobę typu alzhaimer - bierzemy jak najczystszy podzbiór i doprowadzamy do overfittingu - jeśli do tego dojdzie to struktura jest dobra - po tym można przejść do 10k rekordów
+
+minimalzajca false positives - w naszym case ( redukcja kosztów - leki) jest zły - to generuje koszty
+maksymalizacja true positives ?
+
+zacząć z minimalnym zestawem cech i próbować dodawać, sprawdzając czy to coś pomaga
+
+z tym EDA - powinniśmy mieć różne zestawy danych z różnymi cechami - trudno powiedzieć, z jakich cech model się najlepiej nauczy
+
+idealny case -> model uczy się prawdziwych zależności - my nie wiemy od czego zależy ta prawdziwa zależność w dużych cząsteczkach - czyli trudno powiedzieć, jakie cechy najlepiej wybrać
+
+
+za dużo epok - oversmoothing - spadnie efektywność takiego modelu
+zmierzyć MAD - minimum average? distance
+
+
+13 czerwca - ocena naszych projektów
+
+na następne zajęcia - mieć co pokazać - jakie mamy wyniki - BĘDĄ SŁABE I TO JEST OK
+
+MLP random scaffold split
+wyprintować loss i gradienty z pierwszych epok, założyć learning rate, R^2
+wykres z lossem, zobaczyć czy neurony nie giną
+jaki dataset przygotowaliśmy
+
+
