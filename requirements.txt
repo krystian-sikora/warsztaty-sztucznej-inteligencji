@@ -1,5 +1,7 @@
 numpy
 pandas
+matplotlib
 rdkit
 requests
+seaborn
 tqdm
