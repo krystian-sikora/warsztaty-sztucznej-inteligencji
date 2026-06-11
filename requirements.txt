@@ -3,5 +3,6 @@ pandas
 matplotlib
 rdkit
 requests
+scikit-learn
 seaborn
 tqdm
