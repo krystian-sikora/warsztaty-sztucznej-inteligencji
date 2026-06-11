@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import requests
 import streamlit as st
 
 
 PROJECT_SUMMARY_PATH = Path("agent/podsumowanie-pracy.md")
 BEST_GCN_CONFIG_PATH = Path("reports/tuning/gnn/best_config.json")
 BEST_MLP_CONFIG_PATH = Path("reports/tuning/baseline/best_config.json")
+DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
+DEFAULT_OLLAMA_MODEL = "llama3.2:3b"
 
 
 DEFAULT_PROJECT_CONTEXT = """Projekt przewiduje pIC50 dla cząsteczek wobec targetu EGFR.
@@ -102,6 +105,69 @@ def generate_text_response(question: str, project_context: str) -> str:
     )
 
 
+def build_ollama_prompt(question: str, project_context: str) -> str:
+    short_context = project_context[:6000]
+    return f"""Jesteś prostym asystentem tekstowym dla projektu ML przewidującego pIC50 dla EGFR.
+Odpowiadasz wyłącznie tekstem.
+Nie możesz wywoływać narzędzi, uruchamiać kodu, pobierać danych, trenować modeli ani modyfikować plików.
+Jeśli pytanie wykracza poza kontekst projektu, powiedz krótko, że nie masz wystarczającego kontekstu.
+
+Kontekst projektu:
+{short_context}
+
+Pytanie użytkownika:
+{question}
+
+Odpowiedź po polsku:"""
+
+
+def generate_ollama_response(
+    question: str,
+    project_context: str,
+    model: str = DEFAULT_OLLAMA_MODEL,
+    url: str = DEFAULT_OLLAMA_URL,
+) -> str:
+    """Call local Ollama and return text only, with a safe fallback message."""
+    if not question.strip():
+        return "Wpisz pytanie o projekt, modele, metryki albo ograniczenia wyniku."
+
+    payload = {
+        "model": model,
+        "prompt": build_ollama_prompt(question, project_context),
+        "stream": False,
+        "options": {
+            "temperature": 0.2,
+            "num_predict": 350,
+        },
+    }
+
+    try:
+        response = requests.post(url, json=payload, timeout=120)
+        response.raise_for_status()
+    except requests.exceptions.ConnectionError:
+        return (
+            "Nie mogę połączyć się z lokalną Ollama. Uruchom Ollama i pobierz mały model, np.:\n\n"
+            "```powershell\n"
+            "ollama pull llama3.2:3b\n"
+            "ollama serve\n"
+            "```\n\n"
+            "Możesz też przełączyć backend na lokalny stub."
+        )
+    except requests.exceptions.HTTPError as error:
+        return (
+            f"Ollama zwróciła błąd HTTP: {error}. Sprawdź, czy model `{model}` jest pobrany, np. "
+            f"`ollama pull {model}`."
+        )
+    except requests.exceptions.RequestException as error:
+        return f"Nie udało się uzyskać odpowiedzi z Ollama: {error}"
+
+    data = response.json()
+    text = str(data.get("response", "")).strip()
+    if not text:
+        return "Ollama odpowiedziała pustym tekstem. Spróbuj ponownie albo wybierz inny model."
+    return text
+
+
 def render_metric_cards(gcn_config: dict[str, object], mlp_config: dict[str, object]) -> None:
     gcn_col, mlp_col = st.columns(2)
     with gcn_col:
@@ -131,10 +197,25 @@ def main() -> None:
 
     project_context, gcn_config, mlp_config = load_project_context()
 
+    st.sidebar.header("Ustawienia asystenta")
+    backend = st.sidebar.radio(
+        "Backend odpowiedzi",
+        ["Ollama lokalnie", "Lokalny stub"],
+        help="Ollama używa lokalnego modelu LLM. Stub działa bez żadnego modelu.",
+    )
+    ollama_model = st.sidebar.text_input("Model Ollama", value=DEFAULT_OLLAMA_MODEL)
+
+    with st.sidebar.expander("Jak uruchomić Ollama"):
+        st.code(
+            "ollama pull llama3.2:3b\nollama serve",
+            language="powershell",
+        )
+        st.write("Jeśli Ollama działa w tle jako aplikacja desktopowa, osobne `ollama serve` może nie być potrzebne.")
+
     st.title("pIC50 dla EGFR - prosty interfejs projektu")
     st.write(
-        "Ten interfejs pokazuje najważniejsze wyniki projektu i udostępnia prostego lokalnego asystenta tekstowego. "
-        "Asystent nie korzysta z API, nie wywołuje narzędzi i nie uruchamia treningu."
+        "Ten interfejs pokazuje najważniejsze wyniki projektu i udostępnia prostego asystenta tekstowego. "
+        "Asystent odpowiada tekstem, nie wywołuje narzędzi i nie uruchamia treningu."
     )
 
     st.info("Najlepszy model: tuned GCN, random_test R2 = 0.5242.")
@@ -157,7 +238,10 @@ def main() -> None:
     )
 
     if st.button("Odpowiedz"):
-        response = generate_text_response(question, project_context)
+        if backend == "Ollama lokalnie":
+            response = generate_ollama_response(question, project_context, model=ollama_model)
+        else:
+            response = generate_text_response(question, project_context)
         st.markdown(response)
 
 

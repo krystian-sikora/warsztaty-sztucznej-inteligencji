@@ -1,8 +1,8 @@
-# Krok 7: prosty UI z lokalnym asystentem tekstowym
+# Krok 7: prosty UI z lokalnym asystentem tekstowym i Ollama
 
 ## Cel
 
-Celem tego kroku było dodanie prostego interfejsu użytkownika oraz lekkiej funkcjonalności typu LLM. W tej wersji asystent odpowiada wyłącznie tekstem i nie wykonuje żadnych akcji poza wygenerowaniem odpowiedzi.
+Celem tego kroku było dodanie prostego interfejsu użytkownika oraz lekkiej funkcjonalności typu LLM. Asystent odpowiada wyłącznie tekstem i nie wykonuje żadnych akcji poza wygenerowaniem odpowiedzi.
 
 ## Wykonane zmiany
 
@@ -11,6 +11,8 @@ Dodano zależność:
 ```text
 streamlit
 ```
+
+Tryb Ollama korzysta z biblioteki `requests`, która była już używana w projekcie.
 
 Dodano główny plik aplikacji:
 
@@ -29,13 +31,49 @@ Aplikacja pokazuje:
 
 ## Jak działa lokalny asystent
 
+Aplikacja ma dwa tryby odpowiedzi wybierane w panelu bocznym:
+
+- `Ollama lokalnie` - próbuje odpytać lokalny model przez `http://localhost:11434/api/generate`,
+- `Lokalny stub` - używa prostych reguł tekstowych bez prawdziwego modelu LLM.
+
+Domyślny model dla Ollama:
+
+```text
+llama3.2:3b
+```
+
+To mały model dobry na start, bo powinien być relatywnie lekki dla lokalnego uruchamiania.
+
+## Tryb Ollama
+
+Tryb Ollama jest zaimplementowany jako funkcja:
+
+```text
+generate_ollama_response(question, project_context, model)
+```
+
+Funkcja buduje prompt z krótkim kontekstem projektu i wysyła go do lokalnej Ollama. Prompt jawnie ogranicza model:
+
+- odpowiedź ma być tylko tekstem,
+- model nie ma wywoływać narzędzi,
+- model nie ma uruchamiać kodu,
+- model nie ma pobierać danych,
+- model nie ma trenować modeli,
+- model nie ma modyfikować plików.
+
+Jeżeli lokalny serwer Ollama nie działa albo model nie jest pobrany, aplikacja pokazuje instrukcję naprawy zamiast przerywać działanie.
+
+Podczas implementacji komenda `ollama --version` nie była dostępna w systemie, więc sama integracja została dodana, ale do pełnego użycia trzeba jeszcze zainstalować Ollama i pobrać model.
+
+## Tryb stub
+
 Asystent jest zaimplementowany jako lokalna funkcja:
 
 ```text
 generate_text_response(question, project_context)
 ```
 
-Nie jest to połączenie z zewnętrznym API. Funkcja działa deterministycznie na podstawie prostych reguł i lokalnego kontekstu projektu.
+Funkcja działa deterministycznie na podstawie prostych reguł i lokalnego kontekstu projektu. Jest zostawiona jako fallback, gdy Ollama nie jest jeszcze zainstalowana albo uruchomiona.
 
 Asystent może odpowiadać na pytania m.in. o:
 
@@ -56,11 +94,30 @@ Asystent:
 - nie wywołuje narzędzi,
 - nie uruchamia treningu modeli,
 - nie modyfikuje plików,
-- nie pobiera danych z internetu,
 - nie korzysta z kluczy API,
 - nie wykonuje poleceń systemowych.
 
-To jest prosty interfejs demonstracyjny, a nie pełny agent.
+Tryb Ollama wysyła prompt tylko do lokalnego serwera Ollama, a nie do zewnętrznego API. To jest prosty interfejs demonstracyjny, a nie pełny agent.
+
+## Jak przygotować Ollama
+
+Po instalacji Ollama można pobrać mały model:
+
+```powershell
+ollama pull llama3.2:3b
+```
+
+Jeśli Ollama nie działa jako aplikacja w tle, można uruchomić serwer:
+
+```powershell
+ollama serve
+```
+
+Aplikacja domyślnie odpytuje:
+
+```text
+http://localhost:11434/api/generate
+```
 
 ## Jak uruchomić
 
@@ -84,4 +141,4 @@ Alternatywnie, bez aktywacji środowiska:
 
 ## Wynik kroku
 
-Projekt ma teraz prosty UI, który pozwala szybko pokazać wyniki pracy i zadać tekstowe pytanie o projekt bez używania zewnętrznego LLM.
+Projekt ma teraz prosty UI, który pozwala szybko pokazać wyniki pracy i zadać tekstowe pytanie o projekt. Może działać w trybie lokalnego stubu albo z prawdziwym lokalnym LLM przez Ollama.
