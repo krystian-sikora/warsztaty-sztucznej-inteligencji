@@ -1,12 +1,15 @@
-"""Simple Streamlit UI for the pIC50 project summary and text-only assistant."""
+"""Streamlit UI for the pIC50 project summary and assistant with optional API tools."""
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import requests
 import streamlit as st
+
+from llm_assistant import TOOL_PROVIDERS, generate_provider_response
 
 
 PROJECT_SUMMARY_PATH = Path("agent/podsumowanie-pracy.md")
@@ -14,6 +17,12 @@ BEST_GCN_CONFIG_PATH = Path("reports/tuning/gnn/best_config.json")
 BEST_MLP_CONFIG_PATH = Path("reports/tuning/baseline/best_config.json")
 DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
 DEFAULT_OLLAMA_MODEL = "llama3.2:3b"
+
+TOOL_BACKENDS = {
+    "OpenCode Zen": "opencode",
+    "OpenAI": "openai",
+    "Ollama z narzędziami": "ollama",
+}
 
 
 DEFAULT_PROJECT_CONTEXT = """Projekt przewiduje pIC50 dla cząsteczek wobec targetu EGFR.
@@ -192,6 +201,39 @@ def render_metric_cards(gcn_config: dict[str, object], mlp_config: dict[str, obj
         )
 
 
+def render_tool_backend_settings(backend: str) -> tuple[str, str, str]:
+    provider_key = TOOL_BACKENDS[backend]
+    provider = TOOL_PROVIDERS[provider_key]
+
+    api_key = ""
+    if provider.fixed_api_key is None:
+        api_key = st.sidebar.text_input(
+            f"Klucz API ({provider.label})",
+            type="password",
+            help="Klucz nie jest zapisywany na dysku.",
+        )
+        if not api_key and provider.env_var:
+            api_key = os.environ.get(provider.env_var, "")
+
+    model = st.sidebar.text_input(f"Model ({provider.label})", value=provider.default_model)
+
+    if backend == "OpenCode Zen":
+        with st.sidebar.expander("Jak uzyskać klucz OpenCode Zen"):
+            st.markdown(
+                "1. Wejdź na [opencode.ai/auth](https://opencode.ai/auth)\n"
+                "2. Utwórz klucz API (OpenCode Zen)\n"
+                "3. Wklej go powyżej lub ustaw zmienną `OPENCODE_API_KEY`"
+            )
+            st.caption("Subskrypcja Cursor IDE nie zastępuje tego klucza — to osobne API.")
+
+    if backend == "Ollama z narzędziami":
+        with st.sidebar.expander("Jak uruchomić Ollama z narzędziami"):
+            st.code("ollama pull llama3.1\nollama serve", language="powershell")
+            st.caption("Model musi wspierać function calling (np. llama3.1, qwen3).")
+
+    return provider_key, api_key, model
+
+
 def main() -> None:
     st.set_page_config(page_title="pIC50 Project UI", layout="wide")
 
@@ -200,22 +242,32 @@ def main() -> None:
     st.sidebar.header("Ustawienia asystenta")
     backend = st.sidebar.radio(
         "Backend odpowiedzi",
-        ["Ollama lokalnie", "Lokalny stub"],
-        help="Ollama używa lokalnego modelu LLM. Stub działa bez żadnego modelu.",
+        [
+            "OpenCode Zen",
+            "OpenAI",
+            "Ollama z narzędziami",
+            "Ollama (tylko tekst)",
+            "Lokalny stub",
+        ],
+        help="OpenCode Zen i Ollama z narzędziami wywołują predykcję pIC50. Stub odpowiada regułami.",
     )
-    ollama_model = st.sidebar.text_input("Model Ollama", value=DEFAULT_OLLAMA_MODEL)
 
-    with st.sidebar.expander("Jak uruchomić Ollama"):
-        st.code(
-            "ollama pull llama3.2:3b\nollama serve",
-            language="powershell",
-        )
-        st.write("Jeśli Ollama działa w tle jako aplikacja desktopowa, osobne `ollama serve` może nie być potrzebne.")
+    provider_key = ""
+    api_key = ""
+    tool_model = ""
+    if backend in TOOL_BACKENDS:
+        provider_key, api_key, tool_model = render_tool_backend_settings(backend)
+
+    ollama_model = DEFAULT_OLLAMA_MODEL
+    if backend == "Ollama (tylko tekst)":
+        ollama_model = st.sidebar.text_input("Model Ollama", value=DEFAULT_OLLAMA_MODEL)
+        with st.sidebar.expander("Jak uruchomić Ollama"):
+            st.code("ollama pull llama3.2:3b\nollama serve", language="powershell")
 
     st.title("pIC50 dla EGFR - prosty interfejs projektu")
     st.write(
-        "Ten interfejs pokazuje najważniejsze wyniki projektu i udostępnia prostego asystenta tekstowego. "
-        "Asystent odpowiada tekstem, nie wywołuje narzędzi i nie uruchamia treningu."
+        "Ten interfejs pokazuje wyniki projektu i udostępnia asystenta. "
+        "W trybach z narzędziami model może wywołać lokalny GCN i przewidzieć pIC50 ze SMILES."
     )
 
     st.info("Najlepszy model: tuned GCN, random_test R2 = 0.5242.")
@@ -230,15 +282,23 @@ def main() -> None:
     with st.expander("Pełne podsumowanie pracy"):
         st.markdown(project_context)
 
-    st.header("Lokalny asystent tekstowy")
+    st.header("Asystent projektu")
     question = st.text_area(
         "Zadaj pytanie o projekt",
-        placeholder="Np. Jaki model uzyskał najlepszy wynik? Czym różni się MLP od GCN?",
+        placeholder="Np. Jaki model uzyskał najlepszy wynik? Jaka jest przewidywana pIC50 dla CCO?",
         height=100,
     )
 
     if st.button("Odpowiedz"):
-        if backend == "Ollama lokalnie":
+        if backend in TOOL_BACKENDS:
+            response = generate_provider_response(
+                question,
+                project_context,
+                provider_key=provider_key,
+                api_key=api_key,
+                model=tool_model,
+            )
+        elif backend == "Ollama (tylko tekst)":
             response = generate_ollama_response(question, project_context, model=ollama_model)
         else:
             response = generate_text_response(question, project_context)
