@@ -1,0 +1,15 @@
+---
+description: Predykcja pIC50 ze SMILES dla EGFR
+globs:
+alwaysApply: false
+---
+
+Gdy użytkownik prosi o predykcję pIC50 z canonical SMILES, uruchom:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\predict_pic50.py --smiles "<SMILES>" --pretty
+```
+
+Nie zgaduj wartości pIC50. Szczegóły narzędzia: `agent/narzedzie-predykcji-pic50.md`.
+
+Jeśli brakuje `reports/tuning/gnn/best_model.pt`, najpierw uruchom `scripts/export_gcn_weights.py`.

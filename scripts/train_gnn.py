@@ -70,7 +70,7 @@ def atom_features(atom: Chem.Atom) -> list[float]:
     ]
 
 
-def smiles_to_graph(smiles: str, target: float) -> GraphSample | None:
+def build_graph_tensors(smiles: str) -> tuple[torch.Tensor, torch.Tensor] | None:
     mol = Chem.MolFromSmiles(smiles)
     if mol is None or mol.GetNumAtoms() == 0:
         return None
@@ -90,10 +90,29 @@ def smiles_to_graph(smiles: str, target: float) -> GraphSample | None:
     degree_inv_sqrt = torch.pow(degree, -0.5)
     degree_inv_sqrt[torch.isinf(degree_inv_sqrt)] = 0.0
     normalized_adj = degree_inv_sqrt[:, None] * adj * degree_inv_sqrt[None, :]
+    return x, normalized_adj
 
+
+def smiles_to_inference_graph(smiles: str) -> GraphSample | None:
+    tensors = build_graph_tensors(smiles)
+    if tensors is None:
+        return None
+    x, adj = tensors
     return GraphSample(
         x=x,
-        adj=normalized_adj,
+        adj=adj,
+        y=torch.tensor(0.0, dtype=torch.float32),
+    )
+
+
+def smiles_to_graph(smiles: str, target: float) -> GraphSample | None:
+    tensors = build_graph_tensors(smiles)
+    if tensors is None:
+        return None
+    x, adj = tensors
+    return GraphSample(
+        x=x,
+        adj=adj,
         y=torch.tensor(float(target), dtype=torch.float32),
     )
 

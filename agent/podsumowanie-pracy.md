@@ -274,6 +274,18 @@ reports/tuning/baseline/
 reports/tuning/gnn/
 ```
 
+## Predykcja pIC50 ze SMILES (narzędzie dla LLM)
+
+Dostępny jest skrypt inferencji dla najlepszego GCN:
+
+```text
+scripts/predict_pic50.py
+scripts/pic50_inference.py
+reports/tuning/gnn/best_model.pt
+```
+
+Szczegóły użycia: `agent/narzedzie-predykcji-pic50.md`.
+
 ## Ograniczenia
 
 Wynik `R2 = 0.5242` dotyczy `random test split`, czyli łatwiejszego wariantu ewaluacji. `Scaffold split` pozostaje ważny jako trudniejszy i bardziej realistyczny test generalizacji do nowych rodzin chemicznych.
