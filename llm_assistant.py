@@ -15,6 +15,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from pic50_inference import WeightsNotFoundError, predict_pic50_batch
+from pic50_tool_logging import log_tool_event
 
 
 MAX_TOOL_ROUNDS = 5
@@ -95,35 +96,133 @@ Kontekst projektu:
 {short_context}"""
 
 
-def execute_predict_pic50(arguments: str) -> dict[str, Any]:
+def execute_predict_pic50(
+    arguments: str,
+    *,
+    provider_label: str,
+    llm_model: str,
+    tool_round: int,
+) -> dict[str, Any]:
+    log_tool_event(
+        "llm_tool_invoke",
+        source="llm_assistant",
+        provider=provider_label,
+        llm_model=llm_model,
+        tool="predict_pic50",
+        tool_round=tool_round,
+        arguments=arguments,
+    )
+
     try:
         payload = json.loads(arguments)
     except json.JSONDecodeError as error:
-        return {"status": "error", "message": f"Invalid tool arguments: {error}"}
+        result = {"status": "error", "message": f"Invalid tool arguments: {error}"}
+        log_tool_event(
+            "llm_tool_result",
+            source="llm_assistant",
+            provider=provider_label,
+            llm_model=llm_model,
+            tool="predict_pic50",
+            tool_round=tool_round,
+            status="error",
+            message=result["message"],
+        )
+        return result
 
     smiles = payload.get("smiles")
     if not isinstance(smiles, list) or not smiles:
-        return {"status": "error", "message": "Field 'smiles' must be a non-empty list of strings."}
+        result = {"status": "error", "message": "Field 'smiles' must be a non-empty list of strings."}
+        log_tool_event(
+            "llm_tool_result",
+            source="llm_assistant",
+            provider=provider_label,
+            llm_model=llm_model,
+            tool="predict_pic50",
+            tool_round=tool_round,
+            status="error",
+            message=result["message"],
+        )
+        return result
 
     smiles_list = [str(item).strip() for item in smiles if str(item).strip()]
     if not smiles_list:
-        return {"status": "error", "message": "No valid SMILES provided."}
+        result = {"status": "error", "message": "No valid SMILES provided."}
+        log_tool_event(
+            "llm_tool_result",
+            source="llm_assistant",
+            provider=provider_label,
+            llm_model=llm_model,
+            tool="predict_pic50",
+            tool_round=tool_round,
+            status="error",
+            message=result["message"],
+        )
+        return result
 
     try:
-        return predict_pic50_batch(smiles_list)
+        result = predict_pic50_batch(
+            smiles_list,
+            source="llm_assistant",
+            caller=f"{provider_label}:{llm_model}",
+        )
     except WeightsNotFoundError as error:
-        return {"status": "error", "message": str(error)}
+        result = {"status": "error", "message": str(error)}
     except FileNotFoundError as error:
-        return {"status": "error", "message": str(error)}
+        result = {"status": "error", "message": str(error)}
     except Exception as error:  # noqa: BLE001 — tool errors must return JSON to the model
-        return {"status": "error", "message": str(error)}
+        result = {"status": "error", "message": str(error)}
+
+    if "predictions" in result:
+        ok_count = sum(1 for item in result["predictions"] if item.get("status") == "ok")
+        log_tool_event(
+            "llm_tool_result",
+            source="llm_assistant",
+            provider=provider_label,
+            llm_model=llm_model,
+            tool="predict_pic50",
+            tool_round=tool_round,
+            ok_count=ok_count,
+            predictions=result["predictions"],
+        )
+    else:
+        log_tool_event(
+            "llm_tool_result",
+            source="llm_assistant",
+            provider=provider_label,
+            llm_model=llm_model,
+            tool="predict_pic50",
+            tool_round=tool_round,
+            status="error",
+            message=result.get("message"),
+        )
+    return result
 
 
-def run_tool_call(name: str, arguments: str) -> str:
+def run_tool_call(
+    name: str,
+    arguments: str,
+    *,
+    provider_label: str,
+    llm_model: str,
+    tool_round: int,
+) -> str:
     if name == "predict_pic50":
-        result = execute_predict_pic50(arguments)
+        result = execute_predict_pic50(
+            arguments,
+            provider_label=provider_label,
+            llm_model=llm_model,
+            tool_round=tool_round,
+        )
     else:
         result = {"status": "error", "message": f"Unknown tool: {name}"}
+        log_tool_event(
+            "llm_tool_unknown",
+            source="llm_assistant",
+            provider=provider_label,
+            llm_model=llm_model,
+            tool=name,
+            tool_round=tool_round,
+        )
     return json.dumps(result, ensure_ascii=False)
 
 
@@ -152,7 +251,16 @@ def generate_tool_assistant_response(
         {"role": "user", "content": question.strip()},
     ]
 
+    log_tool_event(
+        "llm_request_start",
+        source="llm_assistant",
+        provider=provider_label,
+        llm_model=model,
+        question=question.strip()[:500],
+    )
+
     try:
+        tool_round = 0
         for _ in range(MAX_TOOL_ROUNDS):
             response = client.chat.completions.create(
                 model=model,
@@ -165,11 +273,37 @@ def generate_tool_assistant_response(
 
             if not message.tool_calls:
                 text = (message.content or "").strip()
+                log_tool_event(
+                    "llm_request_done",
+                    source="llm_assistant",
+                    provider=provider_label,
+                    llm_model=model,
+                    tool_used=tool_round > 0,
+                    tool_rounds=tool_round,
+                    response_preview=text[:300],
+                )
                 return text or "Model zwrócił pustą odpowiedź."
+
+            tool_round += 1
+            tool_names = [call.function.name for call in message.tool_calls]
+            log_tool_event(
+                "llm_tool_calls",
+                source="llm_assistant",
+                provider=provider_label,
+                llm_model=model,
+                tool_round=tool_round,
+                tools=tool_names,
+            )
 
             messages.append(message.model_dump(exclude_none=True))
             for tool_call in message.tool_calls:
-                tool_result = run_tool_call(tool_call.function.name, tool_call.function.arguments)
+                tool_result = run_tool_call(
+                    tool_call.function.name,
+                    tool_call.function.arguments,
+                    provider_label=provider_label,
+                    llm_model=model,
+                    tool_round=tool_round,
+                )
                 messages.append(
                     {
                         "role": "tool",
@@ -178,6 +312,15 @@ def generate_tool_assistant_response(
                     }
                 )
 
+        log_tool_event(
+            "llm_request_done",
+            source="llm_assistant",
+            provider=provider_label,
+            llm_model=model,
+            tool_used=True,
+            tool_rounds=tool_round,
+            status="tool_round_limit",
+        )
         return "Osiągnięto limit wywołań narzędzi. Spróbuj uprościć pytanie."
     except APIConnectionError:
         if base_url and "11434" in base_url:

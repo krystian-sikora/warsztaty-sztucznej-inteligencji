@@ -66,6 +66,29 @@ Pole `status` może być `error` z komunikatem w `message` (np. nieparsowalny SM
 - SMILES musi być poprawny dla RDKit
 - Wynik nie gwarantuje dobrej generalizacji na nowe rodziny chemiczne (scaffold split był trudniejszy)
 
+## Logowanie (walidacja użycia narzędzia)
+
+Każde wywołanie predykcji zapisuje zdarzenia do:
+
+```text
+logs/pic50_tool.jsonl
+```
+
+Przykładowe zdarzenia:
+
+- `llm_tool_calls` — LLM poprosił o wywołanie narzędzia
+- `llm_tool_invoke` — rozpoczęto `predict_pic50` z argumentami
+- `prediction_ok` / `prediction_error` — wynik GCN dla SMILES
+- `llm_request_done` — koniec odpowiedzi (`tool_used=true/false`)
+
+Podgląd w PowerShell:
+
+```powershell
+Get-Content logs\pic50_tool.jsonl -Tail 20
+```
+
+Logi trafiają też na stderr (terminal ze Streamlit).
+
 ## Moduł Pythona (pod przyszłe API)
 
 Zamiast CLI można zaimportować:

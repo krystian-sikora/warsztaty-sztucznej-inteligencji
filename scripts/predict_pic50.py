@@ -46,6 +46,8 @@ def main() -> int:
             smiles_list,
             config_path=args.config,
             weights_path=args.weights,
+            source="cli",
+            caller="predict_pic50.py",
         )
     except WeightsNotFoundError as error:
         print(str(error), file=sys.stderr)

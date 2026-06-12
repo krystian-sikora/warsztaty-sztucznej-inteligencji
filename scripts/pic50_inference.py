@@ -14,6 +14,7 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+from pic50_tool_logging import log_tool_event
 from train_gnn import collate_graphs, smiles_to_inference_graph
 from tune_gnn import FlexibleGCNRegressor
 
@@ -117,7 +118,18 @@ def predict_pic50_batch(
     smiles_list: list[str],
     config_path: Path = DEFAULT_CONFIG_PATH,
     weights_path: Path = DEFAULT_WEIGHTS_PATH,
+    *,
+    source: str = "unknown",
+    caller: str | None = None,
 ) -> dict[str, Any]:
+    log_tool_event(
+        "prediction_batch_start",
+        source=source,
+        caller=caller,
+        smiles_count=len(smiles_list),
+        smiles=smiles_list,
+    )
+
     model, device = get_cached_predictor(config_path, weights_path)
 
     predictions: list[dict[str, Any]] = []
@@ -130,21 +142,44 @@ def predict_pic50_batch(
                 config_path=config_path,
                 weights_path=weights_path,
             )
-            predictions.append({"smiles": smiles, "pic50": round(pic50, 4), "status": "ok"})
+            row = {"smiles": smiles, "pic50": round(pic50, 4), "status": "ok"}
+            predictions.append(row)
+            log_tool_event(
+                "prediction_ok",
+                source=source,
+                caller=caller,
+                smiles=smiles,
+                pic50=row["pic50"],
+            )
         except ValueError as error:
-            predictions.append(
-                {
-                    "smiles": smiles,
-                    "pic50": None,
-                    "status": "error",
-                    "message": str(error),
-                }
+            row = {
+                "smiles": smiles,
+                "pic50": None,
+                "status": "error",
+                "message": str(error),
+            }
+            predictions.append(row)
+            log_tool_event(
+                "prediction_error",
+                source=source,
+                caller=caller,
+                smiles=smiles,
+                message=str(error),
             )
 
-    return {
+    result = {
         "target": TARGET_ID,
         "target_name": TARGET_NAME,
         "model": MODEL_NAME,
         "predictions": predictions,
         "disclaimer": DISCLAIMER,
     }
+    ok_count = sum(1 for item in predictions if item["status"] == "ok")
+    log_tool_event(
+        "prediction_batch_done",
+        source=source,
+        caller=caller,
+        ok_count=ok_count,
+        error_count=len(predictions) - ok_count,
+    )
+    return result
