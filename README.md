@@ -99,8 +99,7 @@ warsztaty-sztucznej-inteligencji/
 │   ├── processed/              # clean_target_dataset.csv (po prepare)
 │   └── splits/                 # random_*, scaffold_* (po create_splits)
 ├── reports/                    # metryki, wykresy, tuning
-├── logs/                       # pic50_tool.jsonl (gitignore)
-└── EDA.ipynb
+└── logs/                       # pic50_tool.jsonl (gitignore)
 ```
 
 ## Instalacja i setup
